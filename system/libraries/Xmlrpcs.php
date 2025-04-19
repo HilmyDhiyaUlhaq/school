@@ -221,6 +221,12 @@ class CI_Xmlrpcs extends CI_Xmlrpc {
 		if ($data === '')
 		{
 			$CI =& get_instance();
+			if (!isset($CI->load)) {
+				$CI = new CI_Controller();
+				$CI->load = load_class('Loader', 'core');
+				$CI->load->initialize();
+			}
+			$CI->load->library('input');
 			if ($CI->input->method() === 'post')
 			{
 				$data = $CI->input->raw_input_stream;
@@ -244,10 +250,23 @@ class CI_Xmlrpcs extends CI_Xmlrpc {
 			'method' => ''
 		);
 
-		xml_set_object($parser, $parser_object);
+		// Use closures instead of xml_set_object for PHP 8 compatibility
 		xml_parser_set_option($parser, XML_OPTION_CASE_FOLDING, TRUE);
-		xml_set_element_handler($parser, 'open_tag', 'closing_tag');
-		xml_set_character_data_handler($parser, 'character_data');
+		xml_set_element_handler(
+			$parser,
+			function($parser, $name, $attrs) use ($parser_object) {
+				$parser_object->open_tag($name, $attrs);
+			},
+			function($parser, $name) use ($parser_object) {
+				$parser_object->closing_tag($parser, $name);
+			}
+		);
+		xml_set_character_data_handler(
+			$parser, 
+			function($parser, $data) use ($parser_object) {
+				$parser_object->character_data($parser, $data);
+			}
+		);
 		//xml_set_default_handler($parser, 'default_handler');
 
 		//-------------------------------------
@@ -509,8 +528,8 @@ class CI_Xmlrpcs extends CI_Xmlrpc {
 	 */
 	public function multicall($m)
 	{
-		// Disabled
-		return new XML_RPC_Response(0, $this->xmlrpcerr['unknown_method'], $this->xmlrpcstr['unknown_method']);
+		// Uncomment the line below to disable this functionality
+		// return new XML_RPC_Response(0, $this->xmlrpcerr['unknown_method'], $this->xmlrpcstr['unknown_method']);
 
 		$parameters = $m->output_parameters();
 		$calls = $parameters[0];
@@ -550,8 +569,8 @@ class CI_Xmlrpcs extends CI_Xmlrpc {
 	 */
 	public function multicall_error($err)
 	{
-		$str = is_string($err) ? $this->xmlrpcstr["multicall_${err}"] : $err->faultString();
-		$code = is_string($err) ? $this->xmlrpcerr["multicall_${err}"] : $err->faultCode();
+		$str = is_string($err) ? $this->xmlrpcstr["multicall_".$err] : $err->faultString();
+		$code = is_string($err) ? $this->xmlrpcerr["multicall_".$err] : $err->faultCode();
 
 		$struct['faultCode'] = new XML_RPC_Values($code, 'int');
 		$struct['faultString'] = new XML_RPC_Values($str, 'string');

@@ -51,21 +51,21 @@ class GTB_PageRank implements tbr, pref
 		"tld"  => GTB_HELPER::_json_decode(tbr::SERVER_TLDS),
 		"path" => tbr::SERVER_PATH
 	);									// setup the client preferences
-	if (!in_array(self::getPref('tld'), self::getTbrTlds() )) {
-		GTB_Exception::invalidPref('PREFERED_TLD');
-	} else {
-		$this->PREFERED_TLD = pref::PREFERED_TLD;
-		$this->GTB_SUGESSTED_TLD = self::getTbrTldSuggestion();
-	}
-	$init = self::setQueryURL($a);		// setup the query url
-	if (TRUE !== $init) {
-		GTB_Exception::tryAgain();
-	}
+    if (!in_array(self::getPref('tld'), $this->getTbrTlds())) {
+        throw new GTB_Exception('Invalid preferred TLD');
+    } else {
+        $this->PREFERED_TLD = pref::PREFERED_TLD;
+        $this->GTB_SUGESSTED_TLD = self::getTbrTldSuggestion();
+    }
+    $init = self::setQueryURL($a);		// setup the query url
+    if (TRUE !== $init) {
+        GTB_Exception::tryAgain();
+    }
   }
 
   public function getPageRank() {
 	$host  = $this->GTB_SERVER['host'][0];
-	$tld   = (strlen($this->GTB_SUGESSTED_TLD) > 0) ? $this->GTB_SUGESSTED_TLD : $this->PREFERED_TLD;
+  $tld   = (!empty($this->GTB_SUGESSTED_TLD) && is_string($this->GTB_SUGESSTED_TLD)) ? $this->GTB_SUGESSTED_TLD : $this->PREFERED_TLD;
 	$path  = $this->GTB_SERVER['path'];
 	$tbUrl = 'http://' . $host . $tld . $path;
 	$qStrings = self::getQueryStrings();
@@ -108,7 +108,7 @@ class GTB_PageRank implements tbr, pref
   }
   /** getHash - Get the object's 'URL_HASHES' array.
    *  @access  public
-   *  @return  Array         returns array of hash-key-pairs for the object url.
+   *  @return  array         returns array of hash-key-pairs for the object url.
    */
   public function getHashes() {
     return $this->URL_HASHES;
@@ -123,68 +123,94 @@ class GTB_PageRank implements tbr, pref
 
   /** getQueryUrls - Get the object's 'URL_HASHES' array.
    *  @access  public
-   *  @return  Array         returns array of all possible url combinations.
+   *  @return  array         returns array of all possible url combinations.
    */
   public function getQueryUrls($limit=NULL) {
-    $a = self::getQueryUrl();
-    $b = self::getHashes();
-	$QueryUrls = array();
-	$limit = (NULL!==$limit && is_numeric($limit)) ? (int)$limit : 0;
-	$c = 0;
-	//Foreach hash key value...
-	foreach ( $b as $k => $v ) {
-	    //...that is a string with length > 0...
-		if ( is_string($v) AND strlen($v) > 0 ) {
-			//...format a query string.
-			$rs = sprintf(tbr::QUERY_STRING, $v, $a);
-			//Then, foreach available toolbar hostname...
-			foreach ( $this->GTB_SERVER['host'] as $host ) {
-				//...append any available top level domain...
-				foreach ($this->GTB_SERVER['tld'] as $tld) {
-					$tbUri = 'http://'. $host . $tld . tbr::SERVER_PATH . $rs;
-					if ( $c < $limit || $limit == 0 ) {
-						$QueryUrls[] = $tbUri;
-					}
-					$c++;
-				}
-			}
-		}
-	}
-	return (sizeof($QueryUrls)>0) ? $QueryUrls : FALSE;
+    $a = $this->getQueryURL();
+    $b = $this->getHashes();
+    $QueryUrls = array();
+    $limit = (NULL!==$limit && is_numeric($limit)) ? (int)$limit : 0;
+    $c = 0;
+    //Foreach hash key value...
+    foreach ( $b as $k => $v ) {
+        //...that is a string with length > 0...
+        if ( is_string($v) AND strlen($v) > 0 ) {
+            //...format a query string.
+            $rs = sprintf(tbr::QUERY_STRING, $v, $a);
+            //Then, foreach available toolbar hostname...
+            foreach ( $this->GTB_SERVER['host'] as $host ) {
+                //...append any available top level domain...
+                foreach ($this->GTB_SERVER['tld'] as $tld) {
+                    $tbUri = 'http://'. $host . $tld . tbr::SERVER_PATH . $rs;
+                    if ( $c < $limit || $limit == 0 ) {
+                        $QueryUrls[] = $tbUri;
+                    }
+                    $c++;
+                }
+            }
+        }
+    }
+    return (sizeof($QueryUrls) > 0) ? $QueryUrls : [];
   }
 
   /** getTbrServer - Get the Google Toolbar server vars array.
    *  @access  public
-   *  @return  Array         Array contains keys: 'host', 'tld', 'path'.
+   *  @return  array         Array contains keys: 'host', 'tld', 'path'.
    */
   public function getTbrServer() {
 	return $this->GTB_SERVER;
   }
   /** getTbrHosts - Get all available host names.
    *  @access  public
-   *  @return  Array         Array containing all available Toolbar server host names.
+   *  @return  array         Array containing all available Toolbar server host names.
    */
   public function getTbrHosts() {
 	return $this->GTB_SERVER['host'];
   }
   /** getTbrTlds - Get all available top level domains.
    *  @access  public
-   *  @return  Array         Array containing all available Toolbar server top level domains.
+   *  @return  array         Array containing all available Toolbar server top level domains.
    */
   public function getTbrTlds() {
-	return $this->GTB_SERVER['tld'];
+    // Make sure we return a standard indexed array
+    $tlds = $this->GTB_SERVER['tld'];
+    if (!is_array($tlds)) {
+      return [];
+    }
+    
+    // Convert object to array if needed
+    if (is_object($tlds)) {
+      $tlds = (array)$tlds;
+    }
+    
+    // Ensure it's a properly indexed array with scalar values
+    $result = array_values($tlds);
+    
+    // Make sure it's a flat array of strings
+    foreach ($result as $key => $value) {
+      if (is_object($value) || is_array($value)) {
+        $result[$key] = (string)$value;
+      }
+    }
+    
+    return $result;
   }
   /** getTbrTldSuggestion - Get Google's suggestion which top level domain to use.
    *  @access  public
-   *  @return  Array         Array containing all available Toolbar server top level domains.
+   *  @return  string        Top level domain suggested by Google.
    */
   public function getTbrTldSuggestion() {
-	$tmp = explode(".google.", GTB_Request::_get(tbr::SUGGEST_TLD_URL));
-	return isset($tmp[1]) ? trim($tmp[1]) : 'com';
-  }
+    $result = GTB_Request::_get(tbr::SUGGEST_TLD_URL);
+    // Jika hasilnya array, ambil elemen pertama
+    if (is_array($result)) {
+        return isset($result[0]) ? trim($result[0]) : 'com';
+    }
+    // Jika hasilnya string, langsung kembalikan
+    return is_string($result) && strlen($result) > 0 ? trim($result) : 'com';
+}
   /** getTbrPath - Get the Google Toolbar Pagerank request path.
    *  @access  public
-   *  @return  String
+   *  @return  string
    */
   public function getTbrPath() {
 	return $this->GTB_SERVER['path'];
@@ -197,25 +223,25 @@ class GTB_PageRank implements tbr, pref
   }
 
   public function GPR_awesomeHash() {
-    $a = self::getQueryURL();
+    $a = $this->getQueryURL();
     if (NULL!==$a) {
       return GTB_awesomeHash::awesomeHash($a); }
     else { GTB_Exception::noUrl(); }
   }
   public function GPR_jenkinsHash() {
-    $a = self::getQueryURL();
+    $a = $this->getQueryURL();
     if (NULL!==$a) {
       return GTB_jenkinsHash::jenkinsHash($a); }
     else { GTB_Exception::noUrl(); }
   }
   public function GPR_jenkinsHash2() {
-    $a = self::getQueryURL();
+    $a = $this->getQueryURL();
     if (NULL!==$a) {
       return GTB_jenkinsHash::jenkinsHash2($a); }
     else { GTB_Exception::noUrl(); }
   }
   public function GPR_ieHash() {
-    $a = self::getQueryURL();
+    $a = $this->getQueryURL();
     if (NULL!==$a) {
       return GTB_ieHash::ieHash($a); }
     else { GTB_Exception::noUrl(); }
@@ -367,7 +393,7 @@ class GTB_ieHash extends GTB_PageRank
     $NumHashLength = strlen($NumHashString);
     $CheckByte = 0;
     for ($i=($NumHashLength-1); $i>=0; $i--) {
-        $Num = $NumHashString{$i};
+        $Num = $NumHashString[$i];
         $CheckByte += (1===($i % 2)) ? (int)((($Num*2)/10)+(($Num*2)%10)) : $Num;
     }   $CheckByte %= 10;
     if ($CheckByte !== 0) {
@@ -523,9 +549,10 @@ class GTB_Request extends GTB_PageRank
 {
   public static function _get($url) {
 	if (!function_exists('curl_init')) {
-		return self::GetWithoutCurl($url); }
-	else {
-		return self::GetWithCurl($url); }
+		return self::GetWithoutCurl($url);
+    } else {
+		return self::GetWithCurl($url);
+    }
   }
   /**
    * HTTP GET request with curl.
@@ -545,7 +572,24 @@ class GTB_Request extends GTB_PageRank
 	curl_close($ch);
 	return $str;
   }
+  
+  /**
+   * HTTP GET request without curl.
+   * @access    private
+   * @param     string      $url        String, containing the URL.
+   * @return    string      Returns string, containing the result.
+   */
+  private static function GetWithoutCurl($url) {
+    // Fallback method if curl is not available
+    if (ini_get('allow_url_fopen')) {
+      return file_get_contents($url);
+    } else {
+      // No method available to fetch URL
+      return 'com';
+    }
+  }
 }
+
 /** GTB_Exception     GTB_PageRank exception class.
  *  @package          GTB_PageRank
  *  @author           Stephan Schmitz <eyecatchup@gmail.com>
@@ -556,12 +600,10 @@ class GTB_Exception extends Exception
   static function noUrl() {
     header("Content-Type: text/plain;");
     throw new GTB_Exception("No Query URL defined! Use `new GTB_PageRank('http://www.domain.tld')` to create a new GTB_PageRank object.");
-    exit(0);
   }
   static function tryAgain() {
     header("Content-Type: text/plain;");
     throw new GTB_Exception("Error. Please try again!");
-    exit(0);
   }
 }
 
